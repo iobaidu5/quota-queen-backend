@@ -9,6 +9,11 @@ class SupabaseService {
     );
   }
 
+
+  from(table) {
+    return this.client.from(table);
+  }
+
   async createCall({ userId, title, description, scheduledAt, callType }) {
     const { data, error } = await this.client
       .from('calls')
