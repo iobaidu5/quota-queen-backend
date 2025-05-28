@@ -1,0 +1,13 @@
+{
+  "roomId": "123",
+  "timestamp": "2025-05-28T11:05:17.122Z",
+  "payload": {
+    "studentName": "Obaid",
+    "score": 82,
+    "transcript": [
+      "Hello, I’m the buyer.",
+      "What are your pain points?"
+    ],
+    "feedback": "Good rapport but needs stronger objection handling."
+  }
+}
