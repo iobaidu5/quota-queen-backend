@@ -30,17 +30,154 @@ class LiveKitService {
     }
   }
 
-  async generateUserToken(userId, roomName) {
+  // async generateUserToken(userId, roomName) {
+  //   try {
+  //     const token = new AccessToken(
+  //       process.env.LIVEKIT_API_KEY,
+  //       process.env.LIVEKIT_API_SECRET,
+  //       {
+  //         identity: userId,
+  //         name: `User-${userId}`,
+  //         ttl: '8h'
+  //       }
+  //     );
+
+  //     token.addGrant({
+  //       roomJoin: true,
+  //       room: roomName,
+  //       canPublish: true,
+  //       canSubscribe: true,
+  //       canPublishData: true
+  //     });
+
+  //     return token.toJwt();
+  //   } catch (error) {
+  //     console.error('Token generation failed:', error);
+  //     throw new Error('Failed to generate user token');
+  //   }
+  // }
+
+  // async  generateUserToken(userId, userMetadata, roomName, LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET) {
+  //   try {
+
+  //     console.log("userMetadatavuserMetadata" , userMetadata)
+
+
+
+  //     const userName = userMetadata?.first_name || userMetadata?.firstName 
+  //     ? `${userMetadata.first_name || userMetadata.firstName} ${userMetadata.last_name || userMetadata.lastName}`
+  //     : 'Unknown User';
+  //     const token = new AccessToken(
+  //      LIVEKIT_API_KEY,
+  //      LIVEKIT_API_SECRET,
+  //       {
+  //         identity: userId, // UUID string from Supabase (e.g. user.id or user.sub)
+  //         name: userName,
+  //         ttl: '8h'
+  //       }
+  //     );
+  
+  //     // Attach full metadata (used for display, moderation, etc.)
+  //     token.metadata = JSON.stringify({
+  //       email: userMetadata.email,
+  //       email_verified: userMetadata.email_verified,
+  //       first_name: userMetadata.first_name || userMetadata.firstName,
+  //       last_name: userMetadata.last_name || userMetadata.lastName,
+  //       phone_verified: userMetadata.phone_verified,
+  //       sub: userMetadata.sub,
+  //       user_type: userMetadata.user_type,
+  //       metadata: JSON.stringify({
+  //         avatarUrl: userMetadata.avatarUrl || ""
+  //       }),
+  //     });
+  
+  //     token.addGrant({
+  //       roomJoin: true,
+  //       room: roomName,
+  //       canPublish: true,
+  //       canSubscribe: true,
+  //       canPublishData: true
+  //     });
+  
+  //     return token.toJwt();
+  //   } catch (error) {
+  //     console.error('Token generation failed:', error);
+  //     throw new Error('Failed to generate user token');
+  //   }
+  // }
+  async generateUserToken(userId, userMetadata, roomName, LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET) {
     try {
+      // 1. Handle name safely with proper fallbacks
+      const firstName = userMetadata?.first_name || userMetadata?.firstName || '';
+      const lastName = userMetadata?.last_name || userMetadata?.lastName || '';
+      console.log(" firstName ", firstName)
+      console.log(" lastName ", lastName)
+      const userName = firstName || lastName 
+        ? `${firstName} ${lastName}`.trim() 
+        : 'Unknown User';
+
+        console.log(" userName ", userName)
+  
       const token = new AccessToken(
-        process.env.LIVEKIT_API_KEY,
-        process.env.LIVEKIT_API_SECRET,
+        LIVEKIT_API_KEY,
+        LIVEKIT_API_SECRET,
         {
           identity: userId,
-          name: `User-${userId}`,
+          name: userName,  // Use the properly constructed name
           ttl: '8h'
         }
       );
+  
+      // 2. Fix metadata serialization
+      token.metadata = JSON.stringify({
+        email: userMetadata.email,
+        email_verified: userMetadata.email_verified,
+        first_name: firstName,
+        last_name: lastName,
+        phone_verified: userMetadata.phone_verified,
+        sub: userMetadata.sub,
+        user_type: userMetadata.user_type,
+        metadata: JSON.stringify({
+          avatarUrl: userMetadata.avatarUrl || ""
+        })
+      });
+  
+      token.addGrant({
+        roomJoin: true,
+        room: roomName,
+        canPublish: true,
+        canSubscribe: true,
+        canPublishData: true
+      });
+  
+      return token.toJwt();
+    } catch (error) {
+      console.error('Token generation failed:', error);
+      throw new Error('Failed to generate user token');
+    }
+  }
+  
+  async addAIParticipant(roomName, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, aiMetadata = {}) {
+    try {
+      // Generate token with AI metadata
+      const token = new AccessToken(
+        LIVEKIT_API_KEY,
+        LIVEKIT_API_SECRET,
+        {
+          identity: `ai-${Date.now()}`,
+          name: aiMetadata.name || "AI Assistant",
+          ttl: '8h'
+        }
+      );
+
+      // Set AI-specific metadata
+      token.metadata = JSON.stringify({
+        ...aiMetadata,
+        isAI: true,
+        title: aiMetadata.title || "Virtual Agent",
+        designation: aiMetadata.designation || "AI Support",
+        avatarUrl: aiMetadata.avatarUrl || "https://example.com/default-ai-avatar.jpg"
+      });
 
       token.addGrant({
         roomJoin: true,
@@ -50,35 +187,43 @@ class LiveKitService {
         canPublishData: true
       });
 
-      return token.toJwt();
-    } catch (error) {
-      console.error('Token generation failed:', error);
-      throw new Error('Failed to generate user token');
-    }
-  }
+      const aiToken = token.toJwt();
 
-  async addAIParticipant(roomName) {
-    try {
-      const pc = new RTCPeerConnection();
-      const { videoTrack, audioTrack } = this.createAIMediaTracks();
+      // Connect AI using a separate service (see next section)
+      // This should be handled by your AI service
+      console.log(`AI token for room ${roomName}: ${aiToken}`);
+      console.log("AI metadata:", JSON.stringify(aiMetadata));
 
-      pc.addTransceiver(videoTrack, { direction: 'sendonly' });
-      pc.addTransceiver(audioTrack, { direction: 'sendonly' });
-
-      const aiConnection = {
-        pc,
-        videoTrack,
-        audioTrack,
-        intervals: []
-      };
-
-      this.activeRooms.set(roomName, aiConnection);
-      return this.handleSignaling(pc, roomName);
+      return { success: true, token: aiToken };
     } catch (error) {
       console.error('AI participant setup failed:', error);
       throw new Error('Failed to initialize AI participant');
     }
   }
+  
+
+  // async addAIParticipant(roomName, aiMetadata = {}) {
+  //   try {
+  //     const pc = new RTCPeerConnection();
+  //     const { videoTrack, audioTrack } = this.createAIMediaTracks();
+
+  //     pc.addTransceiver(videoTrack, { direction: 'sendonly' });
+  //     pc.addTransceiver(audioTrack, { direction: 'sendonly' });
+
+  //     const aiConnection = {
+  //       pc,
+  //       videoTrack,
+  //       audioTrack,
+  //       intervals: []
+  //     };
+
+  //     this.activeRooms.set(roomName, aiConnection);
+  //     return this.handleSignaling(pc, roomName);
+  //   } catch (error) {
+  //     console.error('AI participant setup failed:', error);
+  //     throw new Error('Failed to initialize AI participant');
+  //   }
+  // }
 
   createAIMediaTracks() {
     const videoSource = new RTCVideoSource();
@@ -165,10 +310,6 @@ class LiveKitService {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Here you would typically send the offer to your signaling server
-      // and receive an answer. This implementation assumes direct connection.
-      // You might need to implement actual signaling with LiveKit's SFU.
-
       return true;
     } catch (error) {
       console.error('Signaling failed:', error);
@@ -206,7 +347,7 @@ class LiveKitService {
     await room.localParticipant.publishTrack(audioTrack, {
       name: 'ai-voice',
       source: Track.Source.Microphone,
-      metadata: JSON.stringify({ isAI: true })
+      metadata: JSON.stringify({ isAI: true, name: "AI AGENT", desingation: "SALEs VP" })
     });
   }
 
@@ -219,5 +360,8 @@ class LiveKitService {
     }
   }
 }
+
+
+
 
 module.exports = { LiveKitService };

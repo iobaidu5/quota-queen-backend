@@ -99,6 +99,7 @@ module.exports = {
       .insert([{
         token: refreshToken,
         user_id: user.id,
+        host_id: user.id,
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       }]);
     if (rError) throw new Error(rError.message || 'Failed to store refresh token');

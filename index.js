@@ -24,12 +24,13 @@ const sessionRoutes = require('./routes/session.routes');
 const transcriptRoutes = require('./routes/transcript.routes');
 const leaderboardRoutes = require('./routes/leaderboard.routes');
 const scorecardRoutes = require('./routes/scorecard.routes');
+const challengeRoutes = require('./routes/challenges.routes');
 
 // Middleware
 const { verifyToken } = require('./middleware/auth.middleware');
 
 // Socket handlers
-const setupSocketHandlers = require('./socket/handlers');
+const setupSocketHandlers = require('./socket/handlers'); 
 //const livekitService = require('./services/livekitService');
 
 // App init
@@ -37,18 +38,34 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+const allowedOrigins = [
+  'https://www.quotaqueen.ai',
+  'http://localhost:8080',
+  'http://localhost:8081'
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS: ' + origin));
+    }
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 
-app.use((req, res, next) => {
-  console.log(`Incoming ${req.method} ${req.path}`);
-  console.log('Headers:', req.headers);
-  console.log('Body:', req.body);
-  next();
-});
-
-
+// app.use((req, res, next) => {
+//   console.log(`Incoming ${req.method} ${req.path}`);
+//   console.log('Headers:', req.headers);
+//   console.log('Body:', req.body);
+//   next();
+// });
 
 
 app.use(cors());
@@ -69,9 +86,14 @@ app.get('/test-token', (req, res) => {
 });
 
 
+
+
 app.post('/api/calls', async (req, res) => {
   try {
-    const { userId, title, description, scheduledAt, callType } = req.body;
+    const { userId, userMetadata, title, description, scheduledAt, callType, LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET} = req.body;
+
+
+    console.log(" LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET ", LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
 
     // Create database record
     const call = await supabase.createCall({
@@ -82,20 +104,29 @@ app.post('/api/calls', async (req, res) => {
       callType
     });
 
-    // Create LiveKit room
-    await livekit.createRoom(call.room_name);
+    await livekit.createRoom(call.room_name, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
 
-    // Add AI participant
-    await livekit.addAIParticipant(call.room_name);
+    const aiResponse = await livekit.addAIParticipant(call.room_name, LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+      name: "AI Assistant",
+      title: "Virtual Support Agent",
+      designation: "AI",
+      avatarUrl: "https://your-cdn.com/ai-avatar.png"
+    });
+
+    console.log("Send this token to AI service:", aiResponse.token);
 
     // Generate user token
-    const token = await livekit.generateUserToken(userId, call.room_name);
+    const token = await livekit.generateUserToken(userId, userMetadata, call.room_name, LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
 
     res.json({
       ...call,
+      userMetadata,
       livekit: {
         roomName: call.room_name,
-        token: token
+        token: token,
+        LIVEKIT_URL,
+        LIVEKIT_API_KEY,
+        LIVEKIT_API_SECRET
       }
     });
 
@@ -170,6 +201,9 @@ app.use('/api/session', verifyToken, sessionRoutes);
 app.use('/api/transcript', verifyToken, transcriptRoutes);
 app.use('/api/leaderboard', verifyToken, leaderboardRoutes);
 app.use('/api/scorecard', scorecardRoutes);
+app.use('/api/challenge', challengeRoutes);
+
+
 
 app.use((err, req, res, next) => {
   console.error(err);
@@ -177,6 +211,7 @@ app.use((err, req, res, next) => {
     message: err.message || 'Internal Server Error'
   });
 });
+
 
 // WebSocket
 io.on('connection', (socket) => setupSocketHandlers(io, socket));

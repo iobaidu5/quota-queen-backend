@@ -1,15 +1,19 @@
-const jwt = require('jsonwebtoken');
+const { createClient } = require('@supabase/supabase-js');
 
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-module.exports.verifyToken = (req, res, next) => {
+module.exports.verifyToken = async (req, res, next) => {
   const header = req.headers.authorization;
   if (!header) return res.status(401).json({ message: 'No token provided' });
+
   const token = header.split(' ')[1];
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = payload;
-    next();
-  } catch {
-    res.status(401).json({ message: 'Invalid token' });
+
+  const { data: user, error } = await supabase.auth.getUser(token);
+
+  if (error || !user) {
+    return res.status(401).json({ message: 'Invalid token', error });
   }
+
+  req.user = user;
+  next();
 };

@@ -23,7 +23,7 @@ class SupabaseService {
         description,
         scheduled_at: "2025-05-17 19:44:00+00",
         call_type: callType,
-        user_id: userId,
+        host_id: userId,
         room_name: `room_${uuidv4()}`,
         status: 'scheduled'
       }])
